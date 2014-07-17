@@ -41,8 +41,8 @@ class Result {
 public:
 	Result(int correct, int almost) : _correct(correct), _almost(almost) {}
 
-	int getCorrect() { return _correct; }
-	int getAlmost() { return _almost; }
+	int getCorrect() const { return _correct; }
+	int getAlmost() const { return _almost; }
 
 private:
 	int _correct;
@@ -79,6 +79,11 @@ Solution::Solution()
 
 /*
  * Construct a solution using the provided Gems
+ *
+ * @param Gem p1 First gem
+ * @param Gem p2 Second gem
+ * @param Gem p3 Third gem
+ * @param Gem p4 Fourth gem
  */
 Solution::Solution(Gem p1, Gem p2, Gem p3, Gem p4)
 {
@@ -91,6 +96,7 @@ Solution::Solution(Gem p1, Gem p2, Gem p3, Gem p4)
 /*
  * Compare gems of other Solution instances
  *
+ * @param Solution other The solution to compare with
  * @returns bool The result of the comparison
  */
 bool Solution::operator== (Solution other) const
@@ -107,6 +113,7 @@ bool Solution::operator== (Solution other) const
  * Tests a given solution "other" against itself.
  * This generates the "black/colored peg" and "white peg" values.
  *
+ * @param Solution other The solution to test
  * @returns Result The "pegs"
  */
 const Result Solution::test(Solution other) const
@@ -133,8 +140,8 @@ const Result Solution::test(Solution other) const
 	}
 
 	// Check if some of the remaining gems at least had correct colors
-	for (std::list<Gem>::const_iterator it1 = left1.begin(); it1 != left1.end(); ++it1) {
-		for (std::list<Gem>::const_iterator it2 = left2.begin(); it2 != left2.end(); ++it2) {
+	for (std::list<Gem>::const_iterator it1 = left2.begin(); it1 != left2.end(); ++it1) {
+		for (std::list<Gem>::const_iterator it2 = left1.begin(); it2 != left1.end(); ++it2) {
 			if (*it1 == *it2) {
 				almost++;
 				break;
@@ -147,6 +154,8 @@ const Result Solution::test(Solution other) const
 
 /*
  * Dumps the value of a given solution to stdout
+ *
+ * @param bool shortString Use short color notation
  */
 void Solution::dump(bool shortString) const
 {
@@ -167,7 +176,7 @@ void Solution::dump(bool shortString) const
 }
 
 //
-// Game board
+// Game board stuff
 //
 class Turn {
 public:
@@ -179,39 +188,98 @@ private:
 	const Result result;
 };
 
+class Cursor {
+public:
+	Cursor(size_t col, Gem selection) : _col(col), _selection(selection) {}
+	const size_t getCol() const { return _col; }
+	Gem getPiece() const { return _selection; }
+private:
+	size_t _col;
+	Gem _selection;
+};
+
 class Gameboard {
 public:
-	Gameboard(Solution code, size_t rows) : _code(code), _rows(rows) {}
-	Gameboard() : _code(Solution()), _rows(10) {}
+	Gameboard(Solution code, size_t rows) : _code(code), _rows(rows), solved(false), end(false) {}
+	Gameboard(size_t rows) : _code(Solution()), _rows(rows), solved(false), end(false) {}
+	Gameboard() : _code(Solution()), _rows(10), solved(false), end(false) {}
 	void addTurn(Turn t);
 	void addTurn(Solution s) { Result r = _code.test(s); addTurn(s, r); }
 	void addTurn(Solution s, Result r) { addTurn(Turn(s, r)); }
-	void printBoard() const;
+	void printBoard(Cursor cursor) const;
 private:
 	Solution _code;
 	std::list<Turn> turns;
 	size_t _rows;
+	bool solved;
+	bool end;
 };
 
+/*
+ * Adds a turn to the current game
+ *
+ * @param Turn t The turn to add
+ */
 void Gameboard::addTurn(Turn t)
 {
+	// NOPE!
+	if (end || solved)
+		return;
+
+	// Update the game status
 	turns.push_back(t);
+	if (t.getResult().getCorrect() == 4) {
+		solved = true;
+		end = true;
+	}
+	if (turns.size() >= _rows) {
+		end = true;
+	}
 }
 
-void Gameboard::printBoard() const
+/*
+ * Prints the board
+ *
+ * @param Cursor cursor The current cursor
+ */
+void Gameboard::printBoard(Cursor cursor) const
 {
-	std::cout << "╭───────────────────────╮" << std::endl;
-	std::cout << "│       MASTERMIND      │" << std::endl;
-	std::cout << "├───┬───┬───┬───╥───┬───┤" << std::endl;
+	// Prepare the game header
+	std::cout << "╭───────────────╮          " << std::endl;
 
-	for (size_t i = turns.size(); i < _rows; ++i)
-		std::cout << "│   │   │   │   ║   │   │" << std::endl;
+	if (end) {
+		if (solved) {
+			std::cout << "│  ! YOU WON !  │          " << std::endl;
+		} else {
+			std::cout << "│  ! FAILURE !  │          " << std::endl;
+		}
+	} else {
+		std::cout << "│   MASTERMIND  │          " << std::endl;
+	}
 
+	std::cout << "├───┬───┬───┬───┤ ╭───┬───╮" << std::endl;
+
+	// Generate the empty rows
+	for (size_t i = turns.size(); i < _rows; ++i) {
+		for (size_t y = 0; y < 4; ++y) {
+			// Time for a cursor?
+			if (!solved && i == _rows-1 && cursor.getCol() == y) {
+				std::cout << "│ " << cursor.getPiece().getShortColorString() << " ";
+			} else {
+				std::cout << "│   ";
+			}
+
+		}
+		// The empty score section
+		std::cout << "│ │   │   │" << std::endl;
+	}
+
+	// Time for the existing guesses
 	for (std::list<Turn>::const_reverse_iterator it1 = turns.rbegin(); it1 != turns.rend(); ++it1) {
 
 		const std::array<Gem, 4> pieces = (*it1).getSolution().getPieces();
 
-
+		// Fill the guesses
 		std::cout << "│";
 		for (size_t i = 0; i < 4; ++i) {
 			if (i != 0)
@@ -219,10 +287,11 @@ void Gameboard::printBoard() const
 			std::cout << " " << pieces[i].getShortColorString() << " ";
 		}
 
+		// And the scores
 		Result r = (*it1).getResult();
-		std::cout << "║ " << std::to_string(r.getCorrect()) << " │ " << std::to_string(r.getAlmost()) << " │" << std::endl;
+		std::cout << "│ │ " << std::to_string(r.getCorrect()) << " │ " << std::to_string(r.getAlmost()) << " │" << std::endl;
 	}
-	std::cout << "╰───┴───┴───┴───╨───┴───╯" << std::endl;
+	std::cout << "╰───┴───┴───┴───╯ ╰───┴───╯" << std::endl;
 }
 
 //
@@ -232,12 +301,11 @@ int main()
 {
 	Gameboard g;
 
-	Solution s2(orange, red, blue, yellow);
-	Solution s3(orange, red, purple, blue);
-	Solution s4;
-	g.addTurn(s2);
-	g.addTurn(s3);
-	g.addTurn(s4);
-	g.printBoard();
+	for (int i = 0; i < 9; ++i) {
+		Solution s(orange, red, blue, (i % 6) + 1);
+		g.addTurn(s);
+	}
+	g.addTurn(Solution());
+	g.printBoard(Cursor(2, orange));
 	return 0;
 }
