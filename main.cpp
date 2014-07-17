@@ -5,19 +5,24 @@
 #include <string>
 #include <iostream>
 #include <stddef.h>
+#include <termios.h>
+#include <unistd.h>
 
 //
 // Gem
 //
-enum GemColor { NONE, red, blue, yellow, green, orange, purple };
-const char GemColorTable[][7] = { "none", "red", "blue", "yellow", "green", "orange", "purple" };
+enum GemColor { none, red, blue, yellow, green, orange, purple };
+const char GemColorTable[][7] = { " ", "red", "blue", "yellow", "green", "orange", "purple" };
 
 class Gem {
 public:
-	Gem() : _color(NONE) {}
+	Gem() : _color(none) {}
+	// Gem(Gem &g) : _color(none) { _color = g.getColor(); }
 	Gem(int color) : _color(GemColor(color)) {}
 	Gem(GemColor color) : _color(color) {}
 	GemColor getColor() const { return _color; }
+	void nextColor() { if ((_color = static_cast<GemColor>(_color+1)) > 6) _color = static_cast<GemColor>(1); }
+	void prevColor() { if ((_color = static_cast<GemColor>(_color-1)) < 1) _color = static_cast<GemColor>(6); }
 	const std::string getColorString() const { return GemColorTable[_color]; }
 	const std::string getShortColorString() const { return std::string(GemColorTable[_color]).substr(0, 1); }
 
@@ -57,8 +62,9 @@ public:
 	Solution();
 	Solution(Gem p1, Gem p2, Gem p3, Gem p4);
 
-	const std::array<Gem, 4> getPieces() const { return pieces; }
+	// std::array<Gem, 4> getPieces() const { return pieces; }
 	bool operator==(Solution other) const;
+	Gem operator[](size_t index) const { return pieces[index]; }
 	const Result test(Solution s) const;
 	void dump(bool shortString) const;
 
@@ -188,32 +194,58 @@ private:
 	const Result result;
 };
 
-class Cursor {
-public:
-	Cursor(size_t col, Gem selection) : _col(col), _selection(selection) {}
-	const size_t getCol() const { return _col; }
-	Gem getPiece() const { return _selection; }
-private:
-	size_t _col;
-	Gem _selection;
-};
+// class Cursor {
+// public:
+// 	Cursor(size_t col, Gem selection) : _col(col), _selection(selection) {}
+// 	const size_t getCol() const { return _col; }
+// 	Gem getPiece() const { return _selection; }
+// private:
+// 	size_t _col;
+// 	Gem _selection;
+// };
 
 class Gameboard {
 public:
-	Gameboard(Solution code, size_t rows) : _code(code), _rows(rows), solved(false), end(false) {}
-	Gameboard(size_t rows) : _code(Solution()), _rows(rows), solved(false), end(false) {}
-	Gameboard() : _code(Solution()), _rows(10), solved(false), end(false) {}
+	Gameboard(Solution code, size_t rows) : _code(code), _rows(rows), solved(false), end(false) { init(); }
+	Gameboard(size_t rows) : _code(Solution()), _rows(rows), solved(false), end(false) { init(); }
+	Gameboard() : _code(Solution()), _rows(10), solved(false), end(false) { init(); }
+	~Gameboard() { reset(); }
+	void init();
+	void reset();
 	void addTurn(Turn t);
 	void addTurn(Solution s) { Result r = _code.test(s); addTurn(s, r); }
 	void addTurn(Solution s, Result r) { addTurn(Turn(s, r)); }
-	void printBoard(Cursor cursor) const;
+	void printBoard(Solution cursor) const;
 private:
 	Solution _code;
 	std::list<Turn> turns;
 	size_t _rows;
 	bool solved;
 	bool end;
+	struct termios saved_attributes;
 };
+
+void Gameboard::init()
+{
+	struct termios tattr;
+	char *name;
+	if (!isatty(STDIN_FILENO)) {
+		fprintf(stderr, "Not connected to a terminal!\n");
+		exit(-1);
+	}
+
+	tcgetattr(STDIN_FILENO, &saved_attributes);
+	tcgetattr(STDIN_FILENO, &tattr);
+	tattr.c_lflag &= ~(ICANON|ECHO);
+	tattr.c_cc[VMIN] = 1;
+	tattr.c_cc[VTIME] = 0;
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &tattr);
+}
+
+void Gameboard::reset()
+{
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);
+}
 
 /*
  * Adds a turn to the current game
@@ -242,7 +274,7 @@ void Gameboard::addTurn(Turn t)
  *
  * @param Cursor cursor The current cursor
  */
-void Gameboard::printBoard(Cursor cursor) const
+void Gameboard::printBoard(Solution cursor) const
 {
 	// Prepare the game header
 	std::cout << "╭───────────────╮          " << std::endl;
@@ -262,9 +294,10 @@ void Gameboard::printBoard(Cursor cursor) const
 	// Generate the empty rows
 	for (size_t i = turns.size(); i < _rows; ++i) {
 		for (size_t y = 0; y < 4; ++y) {
+
 			// Time for a cursor?
-			if (!solved && i == _rows-1 && cursor.getCol() == y) {
-				std::cout << "│ " << cursor.getPiece().getShortColorString() << " ";
+			if (!solved && i == _rows-1) {
+				std::cout << "│ " << cursor[y].getShortColorString() << " ";
 			} else {
 				std::cout << "│   ";
 			}
@@ -277,14 +310,14 @@ void Gameboard::printBoard(Cursor cursor) const
 	// Time for the existing guesses
 	for (std::list<Turn>::const_reverse_iterator it1 = turns.rbegin(); it1 != turns.rend(); ++it1) {
 
-		const std::array<Gem, 4> pieces = (*it1).getSolution().getPieces();
+		const Solution sol = (*it1).getSolution();
 
 		// Fill the guesses
 		std::cout << "│";
 		for (size_t i = 0; i < 4; ++i) {
 			if (i != 0)
 				std::cout << "│";
-			std::cout << " " << pieces[i].getShortColorString() << " ";
+			std::cout << " " << sol[i].getShortColorString() << " ";
 		}
 
 		// And the scores
@@ -295,17 +328,108 @@ void Gameboard::printBoard(Cursor cursor) const
 }
 
 //
-// Flow
+// Game flow
 //
-int main()
-{
-	Gameboard g;
+class Game {
+public:
+	Game() : cursor(Solution(none, none, none, none)), selectionColumn(0), selection(none) {}
+	int run();
+private:
+	void update();
+	void submit();
+	void nextColumn();
+	void prevColumn();
+	void nextColor();
+	void prevColor();
+	Gameboard board;
+	Solution cursor;
+	int selectionColumn;
+	Gem selection;
+};
 
-	for (int i = 0; i < 9; ++i) {
-		Solution s(orange, red, blue, (i % 6) + 1);
-		g.addTurn(s);
+/*
+ * Updates the selection and prints the board
+ */
+void Game::update()
+{
+	cursor[static_cast<size_t>(selectionColumn)] = selection;
+	selection = Gem(selection.getColor());
+	board.printBoard(cursor);
+
+}
+
+/*
+ * Submits the current selection
+ */
+void Game::submit()
+{
+	board.addTurn(cursor);
+	cursor = Solution(none, none, none, none);
+}
+
+/*
+ * Selects the next column
+ */
+void Game::nextColumn()
+{
+	if (++selectionColumn > 3)
+		selectionColumn = 3;
+}
+
+/*
+ * Selects the previous column
+ */
+void Game::prevColumn()
+{
+	if (--selectionColumn < 0)
+		selectionColumn = 0;
+}
+
+/*
+ * Selects the next color
+ */
+void Game::nextColor()
+{
+	selection.nextColor();
+}
+
+/*
+ * Selects the previous color
+ */
+void Game::prevColor()
+{
+	selection.prevColor();
+}
+
+/*
+ * The loop
+ */
+int Game::run()
+{
+	char c;
+	while (true) {
+		read(STDIN_FILENO, &c, 1);
+		if (c == 'a')
+			prevColumn();
+		else if (c == 'd')
+			nextColumn();
+		else if (c == 's')
+			prevColor();
+		else if (c == 'w')
+			nextColor();
+		else if (c == 'q')
+			break;
+		else
+			continue;
+
+		update();
+
 	}
-	g.addTurn(Solution());
-	g.printBoard(Cursor(2, orange));
+
 	return 0;
 }
+
+//
+// main
+//
+int main() { return Game().run(); }
