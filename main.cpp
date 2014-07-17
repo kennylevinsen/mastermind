@@ -167,6 +167,7 @@ private:
 
 class Gameboard {
 public:
+	Gameboard() : _code(Solution()) {}
 	Gameboard(Solution code) : _code(code) {}
 	void addTurn(Turn t);
 	void addTurn(Solution s) { Result r = _code.test(s); addTurn(s, r); }
@@ -196,8 +197,7 @@ void Gameboard::printBoard() const {
 //
 int main()
 {
-	Solution s1;
-	Gameboard g(s1);
+	Gameboard g;
 
 	Solution s2(orange, red, blue, yellow);
 	Solution s3(orange, red, purple, blue);
