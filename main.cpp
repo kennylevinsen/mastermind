@@ -4,6 +4,7 @@
 #include <list>
 #include <string>
 #include <iostream>
+#include <stddef.h>
 
 //
 // Gem
@@ -56,6 +57,7 @@ public:
 	Solution();
 	Solution(Gem p1, Gem p2, Gem p3, Gem p4);
 
+	const std::array<Gem, 4> getPieces() const { return pieces; }
 	bool operator==(Solution other) const;
 	const Result test(Solution s) const;
 	void dump(bool shortString) const;
@@ -118,15 +120,27 @@ const Result Solution::test(Solution other) const
 			correct++;
 		} else {
 			left1.push_back(pieces[i]);
-			left2.push_back(other.pieces[i]);
+
+			// Avoid duplication
+			bool pushIt = true;
+			for (std::list<Gem>::const_iterator it = left2.begin(); it != left2.end(); ++it)
+				if (*it == other.pieces[i])
+					pushIt = false;
+
+			if (pushIt)
+				left2.push_back(other.pieces[i]);
 		}
 	}
 
 	// Check if some of the remaining gems at least had correct colors
-	for (std::list<Gem>::const_iterator it1 = left1.begin(); it1 != left1.end(); ++it1)
-		for (std::list<Gem>::const_iterator it2 = left2.begin(); it2 != left2.end(); ++it2)
-			if (*it1 == *it2)
+	for (std::list<Gem>::const_iterator it1 = left1.begin(); it1 != left1.end(); ++it1) {
+		for (std::list<Gem>::const_iterator it2 = left2.begin(); it2 != left2.end(); ++it2) {
+			if (*it1 == *it2) {
 				almost++;
+				break;
+			}
+		}
+	}
 
 	return Result(correct, almost);
 }
@@ -167,8 +181,8 @@ private:
 
 class Gameboard {
 public:
-	Gameboard() : _code(Solution()) {}
-	Gameboard(Solution code) : _code(code) {}
+	Gameboard(Solution code, size_t rows) : _code(code), _rows(rows) {}
+	Gameboard() : _code(Solution()), _rows(10) {}
 	void addTurn(Turn t);
 	void addTurn(Solution s) { Result r = _code.test(s); addTurn(s, r); }
 	void addTurn(Solution s, Result r) { addTurn(Turn(s, r)); }
@@ -176,20 +190,39 @@ public:
 private:
 	Solution _code;
 	std::list<Turn> turns;
+	size_t _rows;
 };
 
-void Gameboard::addTurn(Turn t) {
+void Gameboard::addTurn(Turn t)
+{
 	turns.push_back(t);
 }
 
-void Gameboard::printBoard() const {
-	for (std::list<Turn>::const_iterator it = turns.begin(); it != turns.end(); ++it) {
-		std::cout << "------" << std::endl;
-		(*it).getSolution().dump(true);
-		Result r = (*it).getResult();
-		std::cout << "Correct: " << std::to_string(r.getCorrect()) <<
-	             ", almost: " << std::to_string(r.getAlmost()) << std::endl;
+void Gameboard::printBoard() const
+{
+	std::cout << "╭───────────────────────╮" << std::endl;
+	std::cout << "│       MASTERMIND      │" << std::endl;
+	std::cout << "├───┬───┬───┬───╥───┬───┤" << std::endl;
+
+	for (size_t i = turns.size(); i < _rows; ++i)
+		std::cout << "│   │   │   │   ║   │   │" << std::endl;
+
+	for (std::list<Turn>::const_reverse_iterator it1 = turns.rbegin(); it1 != turns.rend(); ++it1) {
+
+		const std::array<Gem, 4> pieces = (*it1).getSolution().getPieces();
+
+
+		std::cout << "│";
+		for (size_t i = 0; i < 4; ++i) {
+			if (i != 0)
+				std::cout << "│";
+			std::cout << " " << pieces[i].getShortColorString() << " ";
+		}
+
+		Result r = (*it1).getResult();
+		std::cout << "║ " << std::to_string(r.getCorrect()) << " │ " << std::to_string(r.getAlmost()) << " │" << std::endl;
 	}
+	std::cout << "╰───┴───┴───┴───╨───┴───╯" << std::endl;
 }
 
 //
@@ -201,8 +234,10 @@ int main()
 
 	Solution s2(orange, red, blue, yellow);
 	Solution s3(orange, red, purple, blue);
+	Solution s4;
 	g.addTurn(s2);
 	g.addTurn(s3);
+	g.addTurn(s4);
 	g.printBoard();
 	return 0;
 }
