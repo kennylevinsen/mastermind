@@ -64,7 +64,7 @@ public:
 
 	// std::array<Gem, 4> getPieces() const { return pieces; }
 	bool operator==(Solution other) const;
-	Gem operator[](size_t index) const { return pieces[index]; }
+	Gem operator[](size_t index) const { return pieces.operator[](index); }
 	const Result test(Solution s) const;
 	void dump(bool shortString) const;
 
@@ -332,7 +332,7 @@ void Gameboard::printBoard(Solution cursor) const
 //
 class Game {
 public:
-	Game() : cursor(Solution(none, none, none, none)), selectionColumn(0), selection(none) {}
+	Game() : cursor(Solution(none, none, none, none)), selectionColumn(0), selection(red) {}
 	int run();
 private:
 	void update();
@@ -407,6 +407,7 @@ void Game::prevColor()
 int Game::run()
 {
 	char c;
+	update();
 	while (true) {
 		read(STDIN_FILENO, &c, 1);
 		if (c == 'a')
