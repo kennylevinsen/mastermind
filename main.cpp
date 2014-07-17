@@ -8,28 +8,29 @@
 //
 // Gem
 //
-enum GemColor { NONE, red, blue, yellow, green, white, black };
-const char GemColorTable[][7] = { "none", "red", "blue", "yellow", "green", "white", "black" };
+enum GemColor { NONE, red, blue, yellow, green, orange, purple };
+const char GemColorTable[][7] = { "none", "red", "blue", "yellow", "green", "orange", "purple" };
 
 class Gem {
 public:
-	Gem() : color(NONE) {};
-	Gem(int c) : color(GemColor(c)) {};
-	Gem(GemColor c) : color(c) {};
-	GemColor getColor() { return color; }
-	std::string getColorString() { return GemColorTable[color]; }
+	Gem() : _color(NONE) {}
+	Gem(int color) : _color(GemColor(color)) {}
+	Gem(GemColor color) : _color(color) {}
+	GemColor getColor() const { return _color; }
+	const std::string getColorString() const { return GemColorTable[_color]; }
+	const std::string getShortColorString() const { return std::string(GemColorTable[_color]).substr(0, 1); }
 
-	bool operator==(Gem other)
+	bool operator==(Gem other) const
 	{
-		return other.color == color;
+		return other._color == _color;
 	}
 
-	bool operator!=(Gem other)
+	bool operator!=(Gem other) const
 	{
 		return !operator==(other);
 	}
 private:
-	GemColor color;
+	GemColor _color;
 };
 
 //
@@ -37,14 +38,14 @@ private:
 //
 class Result {
 public:
-	Result(int correct, int almost) : correct(correct), almost(almost) {}
+	Result(int correct, int almost) : _correct(correct), _almost(almost) {}
 
-	int getCorrect() { return correct; }
-	int getAlmost() { return almost; }
+	int getCorrect() { return _correct; }
+	int getAlmost() { return _almost; }
 
 private:
-	int correct;
-	int almost;
+	int _correct;
+	int _almost;
 };
 
 //
@@ -55,9 +56,9 @@ public:
 	Solution();
 	Solution(Gem p1, Gem p2, Gem p3, Gem p4);
 
-	bool operator==(Solution other);
-	Result test(Solution s);
-	void dump();
+	bool operator==(Solution other) const;
+	const Result test(Solution s) const;
+	void dump(bool shortString) const;
 
 private:
 	std::array<Gem, 4> pieces;
@@ -68,8 +69,8 @@ private:
  */
 Solution::Solution()
 {
-	srand(time(NULL));
-	for (int i = 0; i < 4; ++i) {
+	srand(static_cast<unsigned int>(time(NULL)));
+	for (unsigned int i = 0; i < 4; ++i) {
 		pieces[i] = rand() % 6 + 1;
 	}
 }
@@ -90,9 +91,9 @@ Solution::Solution(Gem p1, Gem p2, Gem p3, Gem p4)
  *
  * @returns bool The result of the comparison
  */
-bool Solution::operator==(Solution other)
+bool Solution::operator== (Solution other) const
 {
-	for (int i = 0; i < 4; ++i) {
+	for (unsigned int i = 0; i < 4; ++i) {
 		if (pieces[i] != other.pieces[i])
 			return false;
 	}
@@ -106,13 +107,13 @@ bool Solution::operator==(Solution other)
  *
  * @returns Result The "pegs"
  */
-Result Solution::test(Solution other)
+const Result Solution::test(Solution other) const
 {
 	int correct = 0, almost = 0;
 	std::list<Gem> left1, left2;
 
 	// Check for correct guesses
-	for (int i = 0; i < 4; ++i) {
+	for (unsigned int i = 0; i < 4; ++i) {
 		if (pieces[i] == other.pieces[i]) {
 			correct++;
 		} else {
@@ -122,8 +123,8 @@ Result Solution::test(Solution other)
 	}
 
 	// Check if some of the remaining gems at least had correct colors
-	for (std::list<Gem>::iterator it1 = left1.begin(); it1 != left1.end(); ++it1)
-		for (std::list<Gem>::iterator it2 = left2.begin(); it2 != left2.end(); ++it2)
+	for (std::list<Gem>::const_iterator it1 = left1.begin(); it1 != left1.end(); ++it1)
+		for (std::list<Gem>::const_iterator it2 = left2.begin(); it2 != left2.end(); ++it2)
 			if (*it1 == *it2)
 				almost++;
 
@@ -133,13 +134,16 @@ Result Solution::test(Solution other)
 /*
  * Dumps the value of a given solution to stdout
  */
-void Solution::dump()
+void Solution::dump(bool shortString) const
 {
 	std::cout << "Solution: ";
 
 	// Print the individual colors
-	for (int i = 0; i < 4; ++i) {
-		std::cout << pieces[i].getColorString();
+	for (unsigned int i = 0; i < 4; ++i) {
+		if (shortString)
+			std::cout << pieces[i].getShortColorString();
+		else
+			std::cout << pieces[i].getColorString();
 
 		// Don't print a comma on the last element
 		if (i != 3)
@@ -151,29 +155,54 @@ void Solution::dump()
 //
 // Game board
 //
-class Gameboard {
+class Turn {
+public:
+	Turn(Solution s, Result r) : solution(s), result(r) {}
+	const Result getResult() const { return result; }
+	const Solution getSolution() const { return solution; }
 private:
-
+	const Solution solution;
+	const Result result;
 };
+
+class Gameboard {
+public:
+	Gameboard(Solution code) : _code(code) {}
+	void addTurn(Turn t);
+	void addTurn(Solution s) { Result r = _code.test(s); addTurn(s, r); }
+	void addTurn(Solution s, Result r) { addTurn(Turn(s, r)); }
+	void printBoard() const;
+private:
+	Solution _code;
+	std::list<Turn> turns;
+};
+
+void Gameboard::addTurn(Turn t) {
+	turns.push_back(t);
+}
+
+void Gameboard::printBoard() const {
+	for (std::list<Turn>::const_iterator it = turns.begin(); it != turns.end(); ++it) {
+		std::cout << "------" << std::endl;
+		(*it).getSolution().dump(true);
+		Result r = (*it).getResult();
+		std::cout << "Correct: " << std::to_string(r.getCorrect()) <<
+	             ", almost: " << std::to_string(r.getAlmost()) << std::endl;
+	}
+}
 
 //
 // Flow
 //
 int main()
 {
-	Gem g1(black);
 	Solution s1;
-	Solution s2(black, red, blue, yellow);
-	Solution s3(black, red, black, blue);
-	s1.dump();
-	s2.dump();
-	s3.dump();
+	Gameboard g(s1);
 
-	Result r1 = s1.test(s2);
-	Result r2 = s1.test(s3);
-	std::cout << "Correct: " << std::to_string(r1.getCorrect()) <<
-	             ", almost: " << std::to_string(r1.getAlmost()) << std::endl;
-	std::cout << "Correct: " << std::to_string(r2.getCorrect()) <<
-	             ", almost: " << std::to_string(r2.getAlmost()) << std::endl;
+	Solution s2(orange, red, blue, yellow);
+	Solution s3(orange, red, purple, blue);
+	g.addTurn(s2);
+	g.addTurn(s3);
+	g.printBoard();
 	return 0;
 }
